@@ -92,6 +92,40 @@ Say "hey jarvis" to wake it, speak your request.
   config.env      user configuration (600)
 ```
 
+## Using it
+
+Everything runs through one command: `battle`.
+
+```bash
+battle start        # chat API (skip if you opted into auto-start)
+battle talk         # voice mode — say "hey jarvis", then speak
+```
+
+In voice mode, wait for the listening prompt, say **"hey
+jarvis"**, then just talk — replies are spoken in the voice you
+picked at setup. The chat API can also be called directly:
+
+```bash
+curl -s -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"conversationId":"my-chat","message":"create a fifa battle"}'
+```
+
+| Command | What it does |
+|---|---|
+| `battle start` / `battle stop` | start / stop the chat API |
+| `battle status` | health check of the running API |
+| `battle talk` | voice mode |
+| `battle doctor` | full health check (config, Mongo, NER, voice, whisper) |
+| `battle setup` | re-run the setup wizard |
+| `battle voice` | re-pick the TTS voice profile |
+| `battle logs` | tail the API logs |
+
+If anything misbehaves, run `battle doctor` first — it names the
+broken component. The usual suspects are the two endpoints from
+the wizard: your MongoDB URI and the NER service URL (that
+service must be running and reachable).
+
 ## Updating
 
 Re-run `./install.sh` from the new code — it keeps your config,
