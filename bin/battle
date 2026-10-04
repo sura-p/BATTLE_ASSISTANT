@@ -1,0 +1,202 @@
+#!/bin/bash
+#
+# battle — control CLI for the battle platform
+#
+#   battle setup    run/re-run the configuration wizard
+#   battle voice    re-pick the TTS voice profile and rate
+#   battle doctor   verify every component
+#   battle start    start the chat API as a login LaunchAgent
+#   battle stop     stop the chat API LaunchAgent
+#   battle status   is the chat API responding?
+#   battle mcp      register the MCP server with Claude Code
+#   battle logs     tail the chat API logs
+
+set -euo pipefail
+
+# The CLI lives in <app>/bin, so the app dir is one level up.
+# Resolve through the /opt/homebrew/bin symlink so it still
+# finds the app dir when typed from anywhere.
+
+SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+
+APP_DIR="$(cd "$(dirname "$SELF_PATH")/.." && pwd)"
+
+BATTLE_HOME="${BATTLE_HOME:-$HOME/.battle-mcp}"
+
+LOGS_DIR="$BATTLE_HOME/logs"
+
+LAUNCHD_LABEL="com.battle-mcp.chatapi"
+
+PLIST_PATH="$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
+
+NODE_BIN="$(command -v node || echo /usr/local/bin/node)"
+
+TSX_ENTRY="$APP_DIR/node_modules/tsx/dist/cli.mjs"
+
+
+# ============================================================
+# HELP
+# ============================================================
+
+usage() {
+
+    cat <<EOF
+battle — battle platform control CLI
+
+  battle setup     run/re-run the configuration wizard
+  battle voice     re-pick your TTS voice profile
+  battle doctor    verify every component
+  battle start     start the chat API on login
+  battle stop      stop the chat API
+  battle status    check the chat API
+  battle mcp       register the MCP server with Claude Code
+  battle logs      tail chat API logs
+  battle talk      run the voice assistant (wake word + speech)
+
+App: $APP_DIR
+Home: $BATTLE_HOME
+EOF
+}
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+uid() {
+    id -u
+}
+
+
+running() {
+
+    curl -fsS --max-time 3 \
+        "http://127.0.0.1:${BATTLE_API_PORT:-3000}/health" \
+        > /dev/null 2>&1
+}
+
+
+chat_api_port() {
+
+    # Pull PORT straight out of the user config.
+
+    if [ -f "$BATTLE_HOME/config.env" ]; then
+
+        grep -E '^PORT=' "$BATTLE_HOME/config.env" \
+            | head -1 | cut -d= -f2
+    fi
+}
+
+
+load_agent() {
+
+    mkdir -p "$LOGS_DIR"
+
+    launchctl bootstrap "gui/$(uid)" "$PLIST_PATH" 2>/dev/null \
+        || launchctl load -w "$PLIST_PATH" 2>/dev/null
+}
+
+
+unload_agent() {
+
+    launchctl bootout "gui/$(uid)/$LAUNCHD_LABEL" 2>/dev/null \
+        || launchctl unload "$PLIST_PATH" 2>/dev/null
+}
+
+
+# ============================================================
+# COMMANDS
+# ============================================================
+
+cd "$APP_DIR"
+
+
+case "${1:-}" in
+
+    # ---- setup ----
+    setup | voice)
+
+        MODE=""
+
+        [ "${1:-}" = "voice" ] && MODE="--voice-only"
+
+        exec "$NODE_BIN" "$TSX_ENTRY" \
+            "$APP_DIR/src/setup/wizard.ts" $MODE
+        ;;
+
+    # ---- doctor ----
+    doctor)
+
+        exec "$NODE_BIN" "$TSX_ENTRY" "$APP_DIR/src/doctor.ts"
+        ;;
+
+    # ---- voice assistant (wake word -> VAD -> whisper -> chat) ----
+    talk)
+
+        mkdir -p "$LOGS_DIR"
+        exec "$NODE_BIN" "$TSX_ENTRY" "$APP_DIR/src/voice/main.ts"
+        ;;
+
+    # ---- chat API service ----
+    start)
+
+        if [ ! -f "$PLIST_PATH" ]; then
+            echo "No LaunchAgent installed — run install.sh, or battle setup first."
+            echo "Starting in the foreground instead (Ctrl-C to stop)..."
+            exec "$NODE_BIN" "$TSX_ENTRY" "$APP_DIR/src/api/server.ts"
+        fi
+
+        load_agent
+        echo "✅ chat API LaunchAgent started (label: $LAUNCHD_LABEL)"
+        echo "   logs: $LOGS_DIR"
+        ;;
+
+    stop)
+
+        unload_agent
+        echo "🛑 chat API stopped"
+        ;;
+
+    status)
+
+        BATTLE_API_PORT="${BATTLE_API_PORT:-$(chat_api_port || true)}"
+        BATTLE_API_PORT="${BATTLE_API_PORT:-3000}"
+
+        if running; then
+            echo "✅ chat API responding on port $BATTLE_API_PORT"
+        else
+            echo "❌ chat API not responding (port $BATTLE_API_PORT)"
+            echo "   try: battle start   |   battle logs"
+            exit 1
+        fi
+        ;;
+
+    # ---- MCP registration ----
+    mcp)
+
+        if ! command -v claude > /dev/null 2>&1; then
+            echo "claude CLI not found."
+            echo "Register manually once it is available:"
+            echo "  claude mcp add battle-platform -- '$NODE_BIN' '$TSX_ENTRY' '$APP_DIR/src/mcp/server.ts'"
+            exit 1
+        fi
+
+        echo "Registering MCP server with Claude Code..."
+        claude mcp add battle-platform -- \
+            "$NODE_BIN" "$TSX_ENTRY" "$APP_DIR/src/mcp/server.ts"
+
+        echo "✅ registered: game lookup, schema and mechanic validation are now available in Claude"
+        ;;
+
+    # ---- logs ----
+    logs)
+
+        mkdir -p "$LOGS_DIR"
+        tail -f "$LOGS_DIR/chatapi.log" "$LOGS_DIR/chatapi.err"
+        ;;
+
+    *)
+        usage
+        exit 1
+        ;;
+esac

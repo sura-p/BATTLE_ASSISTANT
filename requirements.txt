@@ -1,0 +1,12 @@
+# Battle platform — python sidecar services (wake word + VAD)
+# One venv installs all of it. Kept in sync with what the
+# wake/vad services import.
+
+# wake/wake_service.py
+openwakeword==0.6.0
+onnxruntime>=1.17
+numpy>=2.0
+
+# vad/vad_service.py
+silero-vad==6.2.3
+torch>=2.8

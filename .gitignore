@@ -1,0 +1,38 @@
+# ============================================================
+# battle platform — what never leaves this machine
+# ============================================================
+
+# Secrets — the setup wizard writes real values to
+# ~/.battle-mcp/config.env instead; these files are dev-only.
+
+.env
+
+config.env
+
+# Node and Python dependencies (rebuilt by install.sh)
+
+node_modules/
+
+.venv/
+.venv-wake/
+.venv-vad/
+
+# Build artifacts (built into ~/.battle-mcp by install.sh)
+
+dist/
+
+native/whisper-worker/build/
+
+# Local state
+
+logs/
+
+*.log
+
+.DS_Store
+
+.vscode/
+
+# Quarantined old git history — contains .env, must never be pushed
+
+.git-do-not-push/
