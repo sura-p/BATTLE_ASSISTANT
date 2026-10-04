@@ -44,12 +44,15 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 # Where the project lives. Set this once before sharing, or
 # override per-run with BATTLE_REPO_URL.
 
-REPO_URL="${BATTLE_REPO_URL:-https://github.com/YOUR_GITHUB_USERNAME/battle-mcp.git}"
+REPO_URL="${BATTLE_REPO_URL:-https://github.com/sura-p/BATTLE_ASSISTANT.git}"
 
-# A checkout has the sources next to this script; a script piped
-# in from curl does not. In that case clone and hand off.
+# A piped-in script has no BASH_SOURCE and no checkout beside it;
+# a checkout has both the sources and this installer file.
 
-if [ ! -f "$(dirname "${BASH_SOURCE[0]}")/src/mcp/server.ts" ]; then
+SELF_DIR="$(dirname "${BASH_SOURCE[0]:-bash}")"
+
+if [ ! -f "$SELF_DIR/src/mcp/server.ts" ] ||
+   [ ! -f "$SELF_DIR/install.sh" ]; then
 
     case "$REPO_URL" in
         *YOUR_GITHUB_USERNAME*)
